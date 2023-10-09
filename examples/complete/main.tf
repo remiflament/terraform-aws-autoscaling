@@ -376,13 +376,13 @@ module "warm_pool" {
   # Autoscaling group
   name = "warm-pool-${local.name}"
 
-  vpc_zone_identifier = module.vpc.private_subnets
+  vpc_zone_identifier = [element(module.vpc.private_subnets, 0)]
   min_size            = 0
   max_size            = 1
   desired_capacity    = 1
 
   image_id      = data.aws_ami.amazon_linux.id
-  instance_type = "t3.micro"
+  instance_type = "t3.medium"
 
   warm_pool = {
     pool_state                  = "Stopped"
@@ -410,11 +410,16 @@ module "warm_pool" {
 
 locals {
   efa_user_data = <<-EOT
-    # Install EFA libraries
+    # Note: It is recommended to install the EFA driver on a custom AMI and
+    # not rely on dynamic installation during instance provisioning in user data
+
     curl -O https://efa-installer.amazonaws.com/aws-efa-installer-latest.tar.gz
     tar -xf aws-efa-installer-latest.tar.gz && cd aws-efa-installer
-    ./efa_installer.sh -y --minimal
-    fi_info -p efa -t FI_EP_RDM
+    ./efa_installer.sh --minimal --yes
+
+    # Not required - just displays info on the EFA interfaces
+    /opt/amazon/efa/bin/fi_info -p efa
+
     # Disable ptrace
     sysctl -w kernel.yama.ptrace_scope=0
   EOT
@@ -923,7 +928,7 @@ module "alb" {
 }
 
 resource "aws_ec2_capacity_reservation" "targeted" {
-  instance_type           = "t3.micro"
+  instance_type           = "t3.medium"
   instance_platform       = "Linux/UNIX"
   availability_zone       = "${local.region}a"
   instance_count          = 1
